@@ -1,6 +1,6 @@
 const mongoose = require('mongoose')
 const UrlModel = require('../models/UrlModel')
-//const ObjectId = mongoose.Types.ObjectId
+
 
 //package for validation of url
 const validUrl = require('valid-url')
@@ -45,22 +45,21 @@ const createUrl = async function (req, res) {
             
             let url = await UrlModel.findOne({longUrl: LongURL})
             if (url){
-                console.log("if", url)
-                res.status(200).json(url)
+                
+                res.status(200).json({status : true, data: url})
             }
 
             else{
-                console.log("B",baseUrl)
+                
                 const ShortUrl = baseUrl + '/getUrl/' + URLCode
                 
                 let tempurldetails = {longUrl : LongURL, shortUrl: ShortUrl, urlCode: URLCode }
 
                 let details = await UrlModel.create(tempurldetails);
-                console.log("else", details)
-                res.status(201).json(details)
+                
+                res.status(201).json({status: true, data: details})
 
-            }
-            
+            }    
             
         }
         
@@ -80,11 +79,10 @@ const getUrl = async function (req, res) {
         const url = await UrlModel.findOne({
             urlCode: req.params.urlcode
         })
-        console.log(url.longUrl)
-
+        
         if (url) {
             // when valid we perform a redirect
-            console.log("Indisde",url.longUrl)
+            
             res.status(200).redirect(url.longUrl)
         } else {
             // else return a not found 404 status
@@ -92,12 +90,11 @@ const getUrl = async function (req, res) {
         }
 
     }
-    // exception handler
+    //exception handler
     catch (err) {
         console.error(err)
         res.status(500).send({status: false , err: err.message})
     }
-    
 
 
 }
