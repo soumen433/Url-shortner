@@ -14,7 +14,7 @@ const createUrl = async function (req, res) {
         if(typeof value === 'string' && value.trim().length === 0) return false
         return true;
     }
-    const baseUrl = 'https://localhost:3000'
+    const baseUrl = 'http://localhost:3000'
 
     const isValidRequestBody = function(requestBody) {
         return Object.keys(requestBody).length > 0
@@ -50,7 +50,8 @@ const createUrl = async function (req, res) {
             }
 
             else{
-                const ShortUrl = baseUrl + '/' + URLCode
+                console.log("B",baseUrl)
+                const ShortUrl = baseUrl + '/getUrl/' + URLCode
                 
                 let tempurldetails = {longUrl : LongURL, shortUrl: ShortUrl, urlCode: URLCode }
 
