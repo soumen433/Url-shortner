@@ -1,6 +1,7 @@
 const mongoose = require('mongoose')
 const UrlModel = require('../models/UrlModel')
 
+//const url = require('mongoose-type-url')
 
 //package for validation of url
 const validUrl = require('valid-url')
@@ -8,92 +9,151 @@ const validUrl = require('valid-url')
 //package for url code generator
 const shortid = require('shortid')
 
+//package for redis 
+const redis = require("redis");
+
+const { promisify } = require("util");
+
+//Connect to redis
+const redisClient = redis.createClient(
+    18002,
+    "redis-18002.c232.us-east-1-2.ec2.cloud.redislabs.com",
+    { no_ready_check: true }
+);
+redisClient.auth("EuHfBYDwlIvlZNWtdqfyR7CjJV7d5bPy", function (err) {
+    if (err) throw err;
+});
+
+redisClient.on("connect", async function () {
+    console.log("Connected to Redis..");
+});
+
+
+
+//1. connect to the server
+//2. use the commands :
+
+//Connection setup for redis
+
+const SET_ASYNC = promisify(redisClient.SET).bind(redisClient);
+const GET_ASYNC = promisify(redisClient.GET).bind(redisClient);
+
+
+
+
+//------------------------------------------------functions--------------------------------------------------------//
+const isValid = function (value) {
+    if (typeof value === 'undefined' || value === null) return false
+    if (typeof value === 'string' && value.trim().length === 0) return false
+    return true;
+}
+const isValidRequestBody = function (requestBody) {
+    return Object.keys(requestBody).length > 0
+}
+//-------------------------------------------------------------------------------------------------------------------//
+
+//create url 
 const createUrl = async function (req, res) {
-    const isValid = function(value) {
-        if(typeof value === 'undefined' || value === null) return false
-        if(typeof value === 'string' && value.trim().length === 0) return false
-        return true;
-    }
-    const baseUrl = 'http://localhost:3000'
+    try {
+        const baseUrl = 'http://localhost:3000'
 
-    const isValidRequestBody = function(requestBody) {
-        return Object.keys(requestBody).length > 0
-    }
-    const requestBody = req.body
+        const requestBody = req.body
 
-    const LongURL = req.body.longUrl;
+        const LongURL = requestBody.longUrl;
 
-    if(!isValidRequestBody(requestBody)) {
-        res.status(400).send({status: false, message: 'Invalid request parameters. Please provide url details'})
-        return
-    }
+        // validation start
+        if (!isValidRequestBody(requestBody)) {
+            res.status(400).send({ status: false, message: 'Invalid request parameters. Please provide url details' })
+            return
+        }
 
-    // check base url if valid using the validUrl.isUri method
-    if (!validUrl.isUri(baseUrl)) {
-        res.status(401).json('Invalid base URL')
-        return
-    }
+        if (!isValid(LongURL)) {
 
-    // if valid, we create the url code
-    const URLCode = shortid.generate()
-    
-    
+            res.status(400).send({ status: false, msg: 'longUrl is required' })
+            return
+        }
 
-    if (validUrl.isUri(LongURL)) {
-    
-        try {
-            
-            let url = await UrlModel.findOne({longUrl: LongURL})
-            if (url){
-                
-                res.status(200).json({status : true, data: url})
-            }
+        //if valid then trim it
+        const trimUrl = LongURL.trim()
 
-            else{
-                
+        // check trim url if valid using the validUrl.isUri method
+        if (!validUrl.isUri(trimUrl)) {
+            res.status(400).send({ status: false, msg: 'Invalid longURL' })
+            return
+        }
+
+
+        // if valid, we create the url code
+        const URLCode = shortid.generate()
+
+        const urlData = await GET_ASYNC(`${trimUrl}`)
+        //console.log("sonu",urlData)
+        if (urlData) {
+            //console.log(urlData)
+            return res.status(200).send({ status: true,message: `Data for ${trimUrl} from the cache`,data: JSON.parse(urlData)})
+
+        }
+        else{
+            const url = await UrlModel.findOne({ longUrl: trimUrl }).select({ _id: 0, longUrl: 1, shortUrl: 1, urlCode: 1 })
+            if (url) {
+                await SET_ASYNC(`${trimUrl}`, JSON.stringify(url))
+
+                res.status(200).send({ status: true, msg: "fetch from db", data: url })
+                return
+            } else {
+
                 const ShortUrl = baseUrl + '/getUrl/' + URLCode
-                
-                let tempurldetails = {longUrl : LongURL, shortUrl: ShortUrl, urlCode: URLCode }
 
-                let details = await UrlModel.create(tempurldetails);
-                
-                res.status(201).json({status: true, data: details})
+                const urlDetails = { longUrl: trimUrl, shortUrl: ShortUrl, urlCode: URLCode }
 
-            }    
-            
+                const details = await UrlModel.create(urlDetails);
+
+                //const responseData = await UrlModel.findOne(details).select({ _id: 0, longUrl: 1, shortUrl: 1, urlCode: 1 })
+                
+                res.status(201).json({ status: true, msg: "New Url create", data: details })
+                return
+            }
         }
-        
-        catch (err) {
-            res.status(500).send({ msg: err.message })
-        }
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).send({ status: false, msg: error.message })
     }
-
-
 }
 
 
 // Getting the url data of the long url with shortened url
 const getUrl = async function (req, res) {
     try {
-        // find a document match to the code in req.params.code
-        const url = await UrlModel.findOne({
-            urlCode: req.params.urlcode
-        })
-        
-        if (url) {
-            // when valid we perform a redirect
+
+        const URLCode = req.params.urlcode
+
+        let urlcache = await GET_ASYNC(`${req.params.urlcode}`)
+        if (urlcache) {
+    
+            return res.status(302).redirect(JSON.parse(urlcache))
+            //console.log("hello after return ")
             
-            res.status(200).redirect(url.longUrl)
         } else {
-            // else return a not found 404 status
-            return res.status(404).send({status: false , err: "No Url found"})
+            const getUrl = await UrlModel.findOne({urlCode: URLCode});
+            console.log("Get Url",getUrl)
+            if (getUrl){
+                await SET_ASYNC(`${URLCode}`, JSON.stringify(getUrl.longUrl))
+
+                return res.status(302).redirect(getUrl.longUrl);
+            
+            }
+
+            else{
+                return res.status(404).send({status: false, err: 'No URL FOUND'})
+            }
         }
 
-    }
-    //exception handler
-    catch (err) {
-        console.error(err)
-        res.status(500).send({status: false , err: err.message})
+
+        //exception handler
+    } catch (err) {
+
+        res.status(500).send({ status: false, err: err.message })
     }
 
 
