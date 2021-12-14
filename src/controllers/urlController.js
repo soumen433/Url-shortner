@@ -50,6 +50,10 @@ const isValid = function (value) {
 const isValidRequestBody = function (requestBody) {
     return Object.keys(requestBody).length > 0
 }
+
+var expression = '^(?!mailto:)(?:(?:http|https|HTTP|HTTPS|ftp)://)(?:\\S+(?::\\S*)?@)?(?:(?:(?:[1-9]\\d?|1\\d\\d|2[01]\\d|22[0-3])(?:\\.(?:1?\\d{1,2}|2[0-4]\\d|25[0-5])){2}(?:\\.(?:[0-9]\\d?|1\\d\\d|2[0-4]\\d|25[0-4]))|(?:(?:[a-z\\u00a1-\\uffff0-9]+-?)*[a-z\\u00a1-\\uffff0-9]+)(?:\\.(?:[a-z\\u00a1-\\uffff0-9]+-?)*[a-z\\u00a1-\\uffff0-9]+)*(?:\\.(?:[a-z\\u00a1-\\uffff]{2,})))|localhost)(?::\\d{2,5})?(?:(/|\\?|#)[^\\s]*)?$';
+var regex = new RegExp(expression);
+
 //-------------------------------------------------------------------------------------------------------------------//
 
 //create url 
@@ -76,44 +80,43 @@ const createUrl = async function (req, res) {
         //if valid then trim it
         const trimUrl = LongURL.trim()
 
-        // check trim url if valid using the validUrl.isUri method
-        if (!validUrl.isUri(trimUrl)) {
-            res.status(400).send({ status: false, msg: 'Invalid longURL' })
-            return
+
+        if(!regex.test(trimUrl)){
+            return res.status(400).send({status : false, err:"url not valid"})
         }
 
-
-        // if valid, we create the url code
-        const URLCode = shortid.generate()
-
-        const urlData = await GET_ASYNC(`${trimUrl}`)
-        //console.log("sonu",urlData)
-        if (urlData) {
-            //console.log(urlData)
-            return res.status(200).send({ status: true,message: `Data for ${trimUrl} from the cache`,data: JSON.parse(urlData)})
-
-        }
         else{
-            const url = await UrlModel.findOne({ longUrl: trimUrl }).select({ _id: 0, longUrl: 1, shortUrl: 1, urlCode: 1 })
-            if (url) {
-                await SET_ASYNC(`${trimUrl}`, JSON.stringify(url))
+            // if valid, we create the url code
+            const URLCode = shortid.generate()
 
-                res.status(200).send({ status: true, msg: "fetch from db", data: url })
-                return
-            } else {
+            const urlData = await GET_ASYNC(`${trimUrl}`)
+            
+            if (urlData) {
+                return res.status(200).send({ status: true,message: `Data for ${trimUrl} from the cache`,data: JSON.parse(urlData)})
 
-                const ShortUrl = baseUrl + '/getUrl/' + URLCode
-
-                const urlDetails = { longUrl: trimUrl, shortUrl: ShortUrl, urlCode: URLCode }
-
-                const details = await UrlModel.create(urlDetails);
-
-                //const responseData = await UrlModel.findOne(details).select({ _id: 0, longUrl: 1, shortUrl: 1, urlCode: 1 })
-                
-                res.status(201).json({ status: true, msg: "New Url create", data: details })
-                return
             }
+            else{
+                const url = await UrlModel.findOne({ longUrl: trimUrl }).select({ _id: 0, longUrl: 1, shortUrl: 1, urlCode: 1 })
+                if (url) {
+                    await SET_ASYNC(`${trimUrl}`, JSON.stringify(url))
+
+                    res.status(200).send({ status: true, msg: "fetch from db", data: url })
+                    return
+                } else {
+
+                    const ShortUrl = baseUrl + '/getUrl/' + URLCode
+
+                    const urlDetails = { longUrl: trimUrl, shortUrl: ShortUrl, urlCode: URLCode }
+
+                    const details = await UrlModel.create(urlDetails);
+                    res.status(201).json({ status: true, msg: "New Url create", data: details })
+                    return
+                }
+            }
+
         }
+
+
 
     } catch (error) {
         console.log(error)
@@ -132,16 +135,14 @@ const getUrl = async function (req, res) {
         if (urlcache) {
     
             return res.status(302).redirect(JSON.parse(urlcache))
-            //console.log("hello after return ")
             
         } else {
             const getUrl = await UrlModel.findOne({urlCode: URLCode});
-            console.log("Get Url",getUrl)
+            
             if (getUrl){
                 await SET_ASYNC(`${URLCode}`, JSON.stringify(getUrl.longUrl))
 
                 return res.status(302).redirect(getUrl.longUrl);
-            
             }
 
             else{
