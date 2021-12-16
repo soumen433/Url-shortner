@@ -146,7 +146,7 @@ const getUrl = async function (req, res) {
             }
 
             else{
-                return res.status(404).send({status: false, err: 'No URL FOUND'})
+                return res.status(404).send({status: false, err: 'Invalid urlcode'})
             }
         }
 
