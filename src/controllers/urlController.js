@@ -15,11 +15,14 @@ const redis = require("redis");
 const { promisify } = require("util");
 
 //Connect to redis
+// line 21 is a public endpoint which we will get when we create a new db on redis
 const redisClient = redis.createClient(
     18002,
     "redis-18002.c232.us-east-1-2.ec2.cloud.redislabs.com",
     { no_ready_check: true }
 );
+
+// the below line contains the password that is being generated
 redisClient.auth("EuHfBYDwlIvlZNWtdqfyR7CjJV7d5bPy", function (err) {
     if (err) throw err;
 });
@@ -28,17 +31,25 @@ redisClient.on("connect", async function () {
     console.log("Connected to Redis..");
 });
 
-
+// REMEMBER ONE THING THE REDIS BY DEFAULT EXPOSE A CALLBACK FUNCTION WHEN SETTING OR GETTING COMMANDS OF REDIS ,  SO INSTEAD WE ARE USING A PROMISE TO SIMPLIFY THINGS
 
 //1. connect to the server
 //2. use the commands :
 
 //Connection setup for redis
 
-const SET_ASYNC = promisify(redisClient.SET).bind(redisClient);
+//Promisify is a very comman utility function that we use in Node
+
+//What this promisify does is that it says give me a function as argument and then it converts that function in a promised based function
+
+// so it is converting the set and get commands into a promise  
+
+// the 2 line below are Redis commands , and here we are accessing a function (redisClient.SET) of redis client
+
+const SET_ASYNC = promisify(redisClient.SET).bind(redisClient); // and bind is js method and so we are calling it and passing an object(redisCLient) that we got from above. So we use bind when we want to tie function call with an object
 const GET_ASYNC = promisify(redisClient.GET).bind(redisClient);
 
-
+// So above of two line returns a function
 
 
 //------------------------------------------------functions--------------------------------------------------------//
