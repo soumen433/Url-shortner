@@ -15,7 +15,8 @@ const redis = require("redis");
 const { promisify } = require("util");
 
 //Connect to redis
-// line 21 is a public endpoint which we will get when we create a new db on redis
+//line 21 is the port on which the server is running 
+// line 22 is a public endpoint {host} which we will get when we create a new db on redis
 const redisClient = redis.createClient(
     18002,
     "redis-18002.c232.us-east-1-2.ec2.cloud.redislabs.com",
@@ -49,7 +50,7 @@ redisClient.on("connect", async function () {
 const SET_ASYNC = promisify(redisClient.SET).bind(redisClient); // and bind is js method and so we are calling it and passing an object(redisCLient) that we got from above. So we use bind when we want to tie function call with an object
 const GET_ASYNC = promisify(redisClient.GET).bind(redisClient);
 
-// So above of two line returns a function
+// So above of two line returns a function. So basically whenever we will call these function and then the promise would be invoked and so the function is invoked on particular object and so basically this function is going get called at the above remote redis server(that we craeted above)
 
 
 //------------------------------------------------functions--------------------------------------------------------//
