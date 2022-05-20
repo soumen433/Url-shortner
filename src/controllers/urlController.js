@@ -22,7 +22,6 @@ const redisClient = redis.createClient(
     "redis-18002.c232.us-east-1-2.ec2.cloud.redislabs.com",
     { no_ready_check: true }
 );
-
 // the below line contains the password that is being generated
 redisClient.auth("EuHfBYDwlIvlZNWtdqfyR7CjJV7d5bPy", function (err) {
     if (err) throw err;
@@ -59,12 +58,14 @@ const isValid = function (value) {
     if (typeof value === 'string' && value.trim().length === 0) return false
     return true;
 }
-const isValidRequestBody = function (requestBody) {
-    return Object.keys(requestBody).length > 0
-}
 
-var expression = '^(?!mailto:)(?:(?:http|https|HTTP|HTTPS|ftp)://)(?:\\S+(?::\\S*)?@)?(?:(?:(?:[1-9]\\d?|1\\d\\d|2[01]\\d|22[0-3])(?:\\.(?:1?\\d{1,2}|2[0-4]\\d|25[0-5])){2}(?:\\.(?:[0-9]\\d?|1\\d\\d|2[0-4]\\d|25[0-4]))|(?:(?:[a-z\\u00a1-\\uffff0-9]+-?)*[a-z\\u00a1-\\uffff0-9]+)(?:\\.(?:[a-z\\u00a1-\\uffff0-9]+-?)*[a-z\\u00a1-\\uffff0-9]+)*(?:\\.(?:[a-z\\u00a1-\\uffff]{2,})))|localhost)(?::\\d{2,5})?(?:(/|\\?|#)[^\\s]*)?$';
-var regex = new RegExp(expression);
+
+//const isValidRequestBody = function (requestBody) {
+//   return Object.keys(requestBody).length > 0
+//}
+
+//var expression = '^(?!mailto:)(?:(?:http|https|HTTP|HTTPS|ftp)://)(?:\\S+(?::\\S*)?@)?(?:(?:(?:[1-9]\\d?|1\\d\\d|2[01]\\d|22[0-3])(?:\\.(?:1?\\d{1,2}|2[0-4]\\d|25[0-5])){2}(?:\\.(?:[0-9]\\d?|1\\d\\d|2[0-4]\\d|25[0-4]))|(?:(?:[a-z\\u00a1-\\uffff0-9]+-?)*[a-z\\u00a1-\\uffff0-9]+)(?:\\.(?:[a-z\\u00a1-\\uffff0-9]+-?)*[a-z\\u00a1-\\uffff0-9]+)*(?:\\.(?:[a-z\\u00a1-\\uffff]{2,})))|localhost)(?::\\d{2,5})?(?:(/|\\?|#)[^\\s]*)?$';
+//var regex = new RegExp(expression);
 
 //-------------------------------------------------------------------------------------------------------------------//
 
@@ -78,7 +79,7 @@ const createUrl = async function (req, res) {
         const LongURL = requestBody.longUrl;
 
         // validation start
-        if (!isValidRequestBody(requestBody)) {
+        if (Object.keys(requestBody).length === 0) {
             res.status(400).send({ status: false, message: 'Invalid request parameters. Please provide url details' })
             return
         }
@@ -93,41 +94,48 @@ const createUrl = async function (req, res) {
         const trimUrl = LongURL.trim()
 
 
-        if(!regex.test(trimUrl)){
-            return res.status(400).send({status : false, err:"url not valid"})
+        if (!validUrl.isUri(trimUrl)) {
+            return res.status(400).send({ status: false, message: "url not valid" })
         }
 
-        else{
-            // if valid, we create the url code
-            const URLCode = shortid.generate()
 
-            const urlData = await GET_ASYNC(`${trimUrl}`)
+        //  we create the url code
+        const URLCode = shortid.generate()
+
+        const urlData = await GET_ASYNC(`${trimUrl}`)
+
+        if (urlData) {
+            return res.status(200).send({ status: true, message: `Data for ${trimUrl} from the cache`, data: JSON.parse(urlData) })
+
+        }
+
+        const url = await UrlModel.findOne({ longUrl: trimUrl }).select({ _id: 0, longUrl: 1, shortUrl: 1, urlCode: 1 })
+        if (url) {
+            await SET_ASYNC(`${trimUrl}`, JSON.stringify({ "longUrl": url.longUrl,
+            "shortUrl": url.shortUrl,
+            "urlCode": url.urlCode}))
+
+          return  res.status(200).send({ status: true, msg: "fetch from db", data:{"longUrl": url.longUrl,
+            "shortUrl": url.shortUrl,
+            "urlCode": url.urlCode}})
+
             
-            if (urlData) {
-                return res.status(200).send({ status: true,message: `Data for ${trimUrl} from the cache`,data: JSON.parse(urlData)})
-
-            }
-            else{
-                const url = await UrlModel.findOne({ longUrl: trimUrl }).select({ _id: 0, longUrl: 1, shortUrl: 1, urlCode: 1 })
-                if (url) {
-                    await SET_ASYNC(`${trimUrl}`, JSON.stringify(url))
-
-                    res.status(200).send({ status: true, msg: "fetch from db", data: url })
-                    return
-                } else {
-
-                    const ShortUrl = baseUrl + '/getUrl/' + URLCode
-
-                    const urlDetails = { longUrl: trimUrl, shortUrl: ShortUrl, urlCode: URLCode }
-
-                    const details = await UrlModel.create(urlDetails);
-                    res.status(201).json({ status: true, msg: "New Url create", data: details })
-                    return
-                }
-            }
-
         }
 
+
+        const ShortUrl = baseUrl + '/' + URLCode.toLocaleLowerCase()
+
+        const urlDetails = { longUrl: trimUrl, shortUrl: ShortUrl, urlCode: URLCode }
+
+        const details = await UrlModel.create(urlDetails)
+       
+      return  res.status(201).send({
+            status: true, msg: "New Url create", data: {
+                "longUrl": details.longUrl,
+                "shortUrl": details.shortUrl,
+                "urlCode": details.urlCode
+            }
+        })
 
 
     } catch (error) {
@@ -137,28 +145,30 @@ const createUrl = async function (req, res) {
 }
 
 
+
+
 // Getting the url data of the long url with shortened url
 const getUrl = async function (req, res) {
     try {
 
         const URLCode = req.params.urlcode
+        if(!isValid(URLCode)) return res.status(400).send({status:false,message:"plz enter valid urlCode"})
 
         let urlcache = await GET_ASYNC(`${req.params.urlcode}`)
         if (urlcache) {
-    
-            return res.status(302).redirect(JSON.parse(urlcache))
-            
+            return res.status(302).send("redirect to"+urlcache)
+           
+
         } else {
-            const getUrl = await UrlModel.findOne({urlCode: URLCode});
-            
-            if (getUrl){
+            const getUrl = await UrlModel.findOne({ urlCode: URLCode });
+
+            if (getUrl) {
                 await SET_ASYNC(`${URLCode}`, JSON.stringify(getUrl.longUrl))
-
-                return res.status(302).redirect(getUrl.longUrl);
+                return res.status(302).send("redirect to"+`${getUrl.longUrl}`)
+               
             }
-
-            else{
-                return res.status(404).send({status: false, err: 'Invalid urlcode'})
+            else {
+                return res.status(404).send({ status: false, err: 'urlcode not found' })
             }
         }
 
