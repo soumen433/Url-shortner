@@ -111,15 +111,21 @@ const createUrl = async function (req, res) {
 
         const url = await UrlModel.findOne({ longUrl: trimUrl }).select({ _id: 0, longUrl: 1, shortUrl: 1, urlCode: 1 })
         if (url) {
-            await SET_ASYNC(`${trimUrl}`, JSON.stringify({ "longUrl": url.longUrl,
-            "shortUrl": url.shortUrl,
-            "urlCode": url.urlCode}))
+            await SET_ASYNC(`${trimUrl}`, JSON.stringify({
+                "longUrl": url.longUrl,
+                "shortUrl": url.shortUrl,
+                "urlCode": url.urlCode
+            }))
 
-          return  res.status(200).send({ status: true, msg: "fetch from db", data:{"longUrl": url.longUrl,
-            "shortUrl": url.shortUrl,
-            "urlCode": url.urlCode}})
+            return res.status(200).send({
+                status: true, msg: "fetch from db", data: {
+                    "longUrl": url.longUrl,
+                    "shortUrl": url.shortUrl,
+                    "urlCode": url.urlCode
+                }
+            })
 
-            
+
         }
 
 
@@ -128,8 +134,8 @@ const createUrl = async function (req, res) {
         const urlDetails = { longUrl: trimUrl, shortUrl: ShortUrl, urlCode: URLCode }
 
         const details = await UrlModel.create(urlDetails)
-       
-      return  res.status(201).send({
+
+        return res.status(201).send({
             status: true, msg: "New Url create", data: {
                 "longUrl": details.longUrl,
                 "shortUrl": details.shortUrl,
@@ -152,25 +158,23 @@ const getUrl = async function (req, res) {
     try {
 
         const URLCode = req.params.urlcode
-        if(!isValid(URLCode)) return res.status(400).send({status:false,message:"plz enter valid urlCode"})
+        if (!isValid(URLCode)) return res.status(400).send({ status: false, message: "plz enter valid urlCode" })
 
         let urlcache = await GET_ASYNC(`${req.params.urlcode}`)
         if (urlcache) {
-            return res.status(302).send("redirect to"+urlcache)
-           
-
-        } else {
-            const getUrl = await UrlModel.findOne({ urlCode: URLCode });
-
-            if (getUrl) {
-                await SET_ASYNC(`${URLCode}`, JSON.stringify(getUrl.longUrl))
-                return res.status(302).send("redirect to"+`${getUrl.longUrl}`)
-               
-            }
-            else {
-                return res.status(404).send({ status: false, err: 'urlcode not found' })
-            }
+            let cache = JSON.parse(urlcache)
+            return res.status(302).redirect(cache)
         }
+        const getUrl = await UrlModel.findOne({ urlCode: URLCode });
+        if (getUrl) {
+            await SET_ASYNC(`${URLCode}`, JSON.stringify(getUrl.longUrl))
+            return res.status(302).redirect(getUrl.longUrl)
+
+        }
+        else {
+            return res.status(404).send({ status: false, err: 'urlcode not found' })
+        }
+
 
 
         //exception handler
